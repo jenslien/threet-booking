@@ -78,7 +78,15 @@ Med ett senter blir det omtrent 28 kall i døgnet: 24 for bookinger og 4 for
 timeplanen. I tillegg kommer innlogging ved oppstart og ellers hver 7. dag, og
 1–4 kall per booking (ett forsøk pluss opptil 3 nye) samt én henting av
 bookinger etterpå. Avbestilling gir ett kall pluss én henting av bookinger.
-Endringer du gjør på 3t.no vises innen en time.
+Endringer du gjør på 3t.no vises innen en time, eller med en gang du trykker
+`button.3t_oppdater_na` (ett kall, bare bookinger).
+
+Står du på venteliste, hentes bookingene oftere, slik at du ser det raskt når du
+rykker opp: hvert 15. minutt det siste døgnet før timen, hvert 5. minutt fra 5 timer
+før og hvert minutt fra 3 timer før. 3T stenger ventelisten 2 timer før timen, så
+etter det går det tilbake til én gang i timen. Det blir rundt 160 ekstra kall per
+time du står på venteliste for. Gjeldende intervall vises i attributtet
+`poll_interval_minutes` på `sensor.3t_kommende_bookinger`.
 
 ### Dashbord: bookinger og faste timer
 

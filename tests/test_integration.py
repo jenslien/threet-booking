@@ -291,3 +291,54 @@ async def test_api_traffic_per_day(hass: HomeAssistant, fake_client, freezer) ->
 async def test_no_timetable_calls_without_rules(hass: HomeAssistant, fake_client) -> None:
     await setup_entry(hass, rules=())
     fake_client.get_group_activities.assert_not_called()
+
+
+def _waitlisted(start):
+    from custom_components.threet.threet_api import Booking
+
+    return Booking(id="w1", activity_id="aw", kind="WaitingListBooking", waiting_list_position=3,
+                   can_cancel=True, cancel_code="", activity=make_activity("aw", start))
+
+
+async def test_waitlist_polling_tiers(hass: HomeAssistant, fake_client) -> None:
+    from custom_components.threet.coordinator import ThreeTCoordinator, ThreeTData
+
+    now = dt_util.utcnow()
+    poll = ThreeTCoordinator._poll_interval
+    def interval(hours_left):
+        return poll(ThreeTData(bookings=[_waitlisted(now + timedelta(hours=hours_left))]), now)
+
+    assert interval(48) == timedelta(hours=1)
+    assert interval(24.5) == timedelta(minutes=30)  # wakes exactly when the 15-min tier starts
+    assert interval(10) == timedelta(minutes=15)
+    assert interval(4) == timedelta(minutes=5)
+    assert interval(2.5) == timedelta(minutes=1)
+    assert interval(1.5) == timedelta(hours=1)  # waiting list closed (2 h before)
+    assert poll(ThreeTData(bookings=[]), now) == timedelta(hours=1)
+
+
+async def test_waitlist_polling_traffic(hass: HomeAssistant, fake_client, freezer) -> None:
+    """Total bookings calls from 30 h before a waitlisted class until it starts."""
+    await hass.config.async_set_time_zone("Europe/Oslo")
+    start = dt_util.utcnow() + timedelta(hours=30)
+    fake_client.get_my_bookings.return_value = [_waitlisted(start)]
+    await setup_entry(hass, rules=())
+    fake_client.get_my_bookings.reset_mock()
+    while dt_util.utcnow() < start:
+        freezer.tick(timedelta(seconds=30))
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done()
+    calls = fake_client.get_my_bookings.await_count
+    # 6 h hourly + 19 h at 15 min + 2 h at 5 min + 1 h at 1 min + 2 h hourly ≈ 6+76+24+60+2
+    assert 160 <= calls <= 175, calls
+
+
+async def test_refresh_button(hass: HomeAssistant, fake_client) -> None:
+    await setup_entry(hass, rules=())
+    fake_client.get_my_bookings.reset_mock()
+    await hass.services.async_call(
+        "button", "press", {"entity_id": "button.3t_oppdater_na"}, blocking=True
+    )
+    await hass.async_block_till_done()
+    assert fake_client.get_my_bookings.await_count == 1
+    fake_client.get_group_activities.assert_not_called()

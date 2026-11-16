@@ -22,7 +22,23 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ThreeTConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator = entry.runtime_data.coordinator
-    async_add_entities(CancelBookingButton(coordinator, i) for i in range(BOOKING_SLOTS))
+    async_add_entities(
+        [RefreshButton(coordinator)]
+        + [CancelBookingButton(coordinator, i) for i in range(BOOKING_SLOTS)]
+    )
+
+
+class RefreshButton(ThreeTAccountEntity, ButtonEntity):
+    """Fetch bookings from 3T right now (one API call)."""
+
+    _attr_name = "Oppdater nå"
+    _attr_icon = "mdi:refresh"
+
+    def __init__(self, coordinator) -> None:
+        super().__init__(coordinator, "refresh")
+
+    async def async_press(self) -> None:
+        await self.coordinator.async_refresh_now()
 
 
 class CancelBookingButton(ThreeTAccountEntity, ButtonEntity):

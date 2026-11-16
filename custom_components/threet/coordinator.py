@@ -37,6 +37,8 @@ from .const import (
     STATUS_WAITLIST,
     TIMETABLE_INTERVAL,
     UPDATE_INTERVAL,
+    WAITLIST_CLOSES_BEFORE,
+    WAITLIST_POLLING,
 )
 from .models import Rule, RuleState, RuleStatus
 from .threet_api import Booking, GroupActivity, ThreeTAuthError, ThreeTClient, ThreeTError
@@ -135,7 +137,32 @@ class ThreeTCoordinator(DataUpdateCoordinator[ThreeTData]):
 
         data = ThreeTData(bookings=bookings, timetable=self._timetable)
         self._evaluate(data)
+        self.update_interval = self._poll_interval(data, now)
         return data
+
+    @staticmethod
+    def _poll_interval(data: ThreeTData, now: datetime) -> timedelta:
+        """Hourly, but faster while on a waiting list that can still move."""
+        interval = UPDATE_INTERVAL
+        for booking in data.upcoming:
+            if not booking.is_waiting_list:
+                continue
+            start = booking.activity.start
+            closes = start - WAITLIST_CLOSES_BEFORE
+            if closes <= now:
+                continue
+            left = start - now
+            tier = next((i for limit, i in WAITLIST_POLLING if left <= limit), UPDATE_INTERVAL)
+            # Wake up exactly when the next (faster) tier starts or the waiting list closes.
+            boundaries = [start - limit for limit, _ in WAITLIST_POLLING] + [closes]
+            if (nxt := min((b for b in boundaries if b > now), default=None)) is not None:
+                tier = min(tier, max(nxt - now, timedelta(seconds=30)))
+            interval = min(interval, tier)
+        return interval
+
+    async def async_refresh_now(self) -> None:
+        """Manual refresh (bookings only; the timetable keeps its 6 h cache)."""
+        await self.async_request_refresh()
 
     # -- rule evaluation and scheduling ------------------------------------
 

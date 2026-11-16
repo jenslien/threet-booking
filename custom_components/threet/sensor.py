@@ -65,6 +65,9 @@ class UpcomingCountSensor(ThreeTAccountEntity, SensorEntity):
         return {
             "waiting_list": sum(1 for b in upcoming if b.is_waiting_list),
             "max_bookings": 5,
+            "poll_interval_minutes": round(
+                self.coordinator.update_interval.total_seconds() / 60, 1
+            ),
             "bookings": [booking_attributes(b) for b in upcoming],
         }
 
