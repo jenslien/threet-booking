@@ -1,0 +1,22 @@
+book:
+  fields:
+    activity_id:
+      required: true
+      example: "36400000"
+      selector:
+        text:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: threet
+cancel:
+  fields:
+    booking_id:
+      required: true
+      example: "12345678"
+      selector:
+        text:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: threet

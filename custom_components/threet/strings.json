@@ -1,0 +1,123 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Log in to 3T",
+        "description": "Use the same e-mail and password as on 3t.no.",
+        "data": {
+          "username": "E-mail",
+          "password": "Password"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Log in again",
+        "description": "The login for {username} is no longer valid.",
+        "data": {
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Wrong e-mail or password.",
+      "cannot_connect": "Could not reach 3T."
+    },
+    "abort": {
+      "already_configured": "This account is already configured.",
+      "reauth_successful": "Login updated."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Recurring bookings",
+        "menu_options": {
+          "suggestions": "Suggestions from my history",
+          "add_center": "Pick from the timetable",
+          "remove": "Remove recurring bookings"
+        }
+      },
+      "suggestions": {
+        "title": "Suggestions from history",
+        "description": "Classes you booked at least twice in the last year (same class, center, weekday and time). Select the ones to book automatically every week.",
+        "data": {
+          "slots": "Suggestions"
+        }
+      },
+      "add_center": {
+        "title": "Pick from the timetable",
+        "data": {
+          "center": "Center",
+          "weekday": "Weekday"
+        }
+      },
+      "add_class": {
+        "title": "Classes at {center}",
+        "description": "Timetable for {day}. Selected classes are booked automatically every week when booking opens.",
+        "data": {
+          "classes": "Classes"
+        }
+      },
+      "remove": {
+        "title": "Remove recurring bookings",
+        "description": "Existing bookings are not cancelled.",
+        "data": {
+          "rules": "Remove"
+        }
+      }
+    },
+    "abort": {
+      "not_loaded": "The integration is not loaded.",
+      "cannot_connect": "Could not reach 3T.",
+      "no_suggestions": "No new recurring classes found in your history.",
+      "no_classes": "No classes that day at this center."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "rule_status": {
+        "state": {
+          "planlagt": "Scheduled",
+          "bookes_naa": "Booking now",
+          "booket": "Booked",
+          "venteliste": "Waiting list",
+          "pauset": "Paused",
+          "hoppet_over": "Skipped",
+          "avbestilt": "Cancelled",
+          "feilet": "Failed",
+          "stengt": "Booking closed",
+          "ingen_time": "No class found"
+        }
+      }
+    }
+  },
+  "services": {
+    "book": {
+      "name": "Book class",
+      "description": "Books a group class (or the waiting list if full).",
+      "fields": {
+        "activity_id": {
+          "name": "Activity ID",
+          "description": "ID from the timetable."
+        },
+        "config_entry_id": {
+          "name": "Account",
+          "description": "Which 3T account (optional)."
+        }
+      }
+    },
+    "cancel": {
+      "name": "Cancel booking",
+      "description": "Cancels a booking.",
+      "fields": {
+        "booking_id": {
+          "name": "Booking ID",
+          "description": "ID from a booking sensor."
+        },
+        "config_entry_id": {
+          "name": "Account",
+          "description": "Which 3T account (optional)."
+        }
+      }
+    }
+  }
+}

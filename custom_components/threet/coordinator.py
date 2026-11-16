@@ -1,0 +1,332 @@
+"""Data coordinator and booking scheduler for the 3T integration."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+import aiohttp
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
+from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
+from homeassistant.helpers.event import async_track_point_in_utc_time
+from homeassistant.helpers.storage import Store
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
+
+from .const import (
+    BOOKING_OFFSET_SECONDS,
+    CONF_RULES,
+    DOMAIN,
+    EVENT_BOOKED,
+    EVENT_BOOKING_FAILED,
+    LOOKAHEAD_DAYS,
+    RETRY_DELAYS,
+    STATUS_BOOKED,
+    STATUS_BOOKING,
+    STATUS_CANCELLED,
+    STATUS_CLOSED,
+    STATUS_FAILED,
+    STATUS_NO_CLASS,
+    STATUS_PAUSED,
+    STATUS_PLANNED,
+    STATUS_SKIPPED,
+    STATUS_WAITLIST,
+    UPDATE_INTERVAL,
+)
+from .models import Rule, RuleState, RuleStatus
+from .threet_api import Booking, GroupActivity, ThreeTAuthError, ThreeTClient, ThreeTError
+
+_LOGGER = logging.getLogger(__name__)
+
+STORAGE_VERSION = 1
+
+API_ERRORS = (ThreeTError, aiohttp.ClientError, TimeoutError)
+
+_sleep = asyncio.sleep  # patched in tests
+
+
+@dataclass
+class ThreeTData:
+    bookings: list[Booking] = field(default_factory=list)
+    timetable: dict[str, list[GroupActivity]] = field(default_factory=dict)
+
+    @property
+    def upcoming(self) -> list[Booking]:
+        now = dt_util.utcnow()
+        return sorted(
+            (
+                b
+                for b in self.bookings
+                if b.kind != "NoShowBooking" and b.activity and b.activity.start > now
+            ),
+            key=lambda b: b.activity.start,
+        )
+
+
+class ThreeTCoordinator(DataUpdateCoordinator[ThreeTData]):
+    """Fetches bookings + timetable and books rule occurrences when booking opens."""
+
+    config_entry: ConfigEntry
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, client: ThreeTClient) -> None:
+        super().__init__(
+            hass,
+            _LOGGER,
+            config_entry=entry,
+            name=DOMAIN,
+            update_interval=UPDATE_INTERVAL,
+        )
+        self.client = client
+        self.tz = ZoneInfo(hass.config.time_zone)
+        self.rules = [Rule.from_dict(r) for r in entry.options.get(CONF_RULES, [])]
+        self.rule_state: dict[str, RuleState] = {}
+        self.statuses: dict[str, RuleStatus] = {}
+        self._store: Store[dict] = Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}")
+        self._timers: dict[str, tuple[str, CALLBACK_TYPE]] = {}
+        self._in_progress: set[str] = set()
+
+    # -- persistence -------------------------------------------------------
+
+    async def async_load_state(self) -> None:
+        stored = await self._store.async_load() or {}
+        saved = stored.get("rules", {})
+        self.rule_state = {
+            r.id: RuleState(**saved[r.id]) if r.id in saved else RuleState() for r in self.rules
+        }
+
+    @callback
+    def _state_data(self) -> dict:
+        return {"rules": {rid: asdict(st) for rid, st in self.rule_state.items()}}
+
+    async def _async_save_state(self) -> None:
+        await self._store.async_save(self._state_data())
+
+    # -- fetching ----------------------------------------------------------
+
+    async def _async_update_data(self) -> ThreeTData:
+        now = dt_util.utcnow()
+        today = now.astimezone(self.tz).date()
+        try:
+            bookings = await self.client.get_my_bookings(now - timedelta(days=1))
+            timetable = {}
+            for center_id in sorted({r.center_id for r in self.rules}):
+                timetable[center_id] = await self.client.get_group_activities(
+                    [center_id], today, today + timedelta(days=LOOKAHEAD_DAYS), take=500
+                )
+        except ThreeTAuthError as err:
+            raise ConfigEntryAuthFailed(str(err)) from err
+        except API_ERRORS as err:
+            raise UpdateFailed(f"Error talking to 3T: {err}") from err
+
+        data = ThreeTData(bookings=bookings, timetable=timetable)
+        self._evaluate(data)
+        return data
+
+    # -- rule evaluation and scheduling ------------------------------------
+
+    def _next_occurrence(self, rule: Rule, data: ThreeTData) -> GroupActivity | None:
+        now = dt_util.utcnow()
+        candidates = [
+            a
+            for a in data.timetable.get(rule.center_id, [])
+            if a.start > now and rule.matches(a, self.tz)
+        ]
+        return min(candidates, key=lambda a: a.start, default=None)
+
+    @callback
+    def _evaluate(self, data: ThreeTData) -> None:
+        now = dt_util.utcnow()
+        booked = {b.activity_id: b for b in data.bookings if b.kind != "NoShowBooking"}
+
+        for rule in self.rules:
+            state = self.rule_state.setdefault(rule.id, RuleState())
+            # Forget handled occurrences that are long gone.
+            state.handled = {
+                aid: h
+                for aid, h in state.handled.items()
+                if dt_util.parse_datetime(h["start"]) > now - timedelta(days=1)
+            }
+            occ = self._next_occurrence(rule, data)
+            self.statuses[rule.id] = status = self._status_for(rule, state, occ, booked, now)
+            if status.status == STATUS_PLANNED:
+                self._schedule(rule, occ, now)
+            else:
+                self._cancel_timer(rule.id)
+
+        for rule_id in set(self._timers) - {r.id for r in self.rules}:
+            self._cancel_timer(rule_id)
+
+    def _status_for(
+        self,
+        rule: Rule,
+        state: RuleState,
+        occ: GroupActivity | None,
+        booked: dict[str, Booking],
+        now: datetime,
+    ) -> RuleStatus:
+        if occ is None:
+            return RuleStatus(STATUS_NO_CLASS)
+        if booking := booked.get(occ.id):
+            # Remember it, so a later cancellation (here or on 3t.no) is never auto-rebooked.
+            if state.handled.get(occ.id, {}).get("result") != "seen_booked":
+                state.handled[occ.id] = {"start": occ.start.isoformat(), "result": "seen_booked"}
+                self._store.async_delay_save(self._state_data, 5)
+            status = STATUS_WAITLIST if booking.is_waiting_list else STATUS_BOOKED
+            return RuleStatus(status, occ, booking)
+        if occ.id in self._in_progress:
+            return RuleStatus(STATUS_BOOKING, occ)
+        if not state.enabled:
+            return RuleStatus(STATUS_PAUSED, occ)
+        if state.skip_activity_id == occ.id:
+            return RuleStatus(STATUS_SKIPPED, occ)
+        if handled := state.handled.get(occ.id):
+            if handled["result"] == "failed":
+                return RuleStatus(STATUS_FAILED, occ, error=handled.get("error"))
+            if handled["result"] in ("booked", "waitlist"):
+                # Booked by us, not yet visible in the bookings list (refresh pending).
+                waitlist = handled["result"] == "waitlist"
+                return RuleStatus(STATUS_WAITLIST if waitlist else STATUS_BOOKED, occ)
+            # Booked earlier but no longer booked: the user cancelled. Don't rebook.
+            return RuleStatus(STATUS_CANCELLED, occ)
+        if occ.bookable_latest and now > occ.bookable_latest:
+            return RuleStatus(STATUS_CLOSED, occ)
+        return RuleStatus(STATUS_PLANNED, occ)
+
+    @callback
+    def _schedule(self, rule: Rule, occ: GroupActivity, now: datetime) -> None:
+        existing = self._timers.get(rule.id)
+        if existing and existing[0] == occ.id:
+            return
+        self._cancel_timer(rule.id)
+
+        opens = occ.bookable_earliest or now
+        when = opens + timedelta(seconds=BOOKING_OFFSET_SECONDS)
+        if when <= now:
+            self._start_booking(rule.id, occ)
+            return
+
+        @callback
+        def _fire(_now: datetime) -> None:
+            self._timers.pop(rule.id, None)
+            self._start_booking(rule.id, occ)
+
+        _LOGGER.debug("Scheduling %s (%s) at %s", rule.label, occ.id, when)
+        self._timers[rule.id] = (occ.id, async_track_point_in_utc_time(self.hass, _fire, when))
+
+    @callback
+    def _cancel_timer(self, rule_id: str) -> None:
+        if timer := self._timers.pop(rule_id, None):
+            timer[1]()
+
+    @callback
+    def cancel_all_timers(self) -> None:
+        for rule_id in list(self._timers):
+            self._cancel_timer(rule_id)
+
+    @callback
+    def _start_booking(self, rule_id: str, occ: GroupActivity) -> None:
+        if occ.id in self._in_progress:
+            return
+        self._in_progress.add(occ.id)
+        self.statuses[rule_id] = RuleStatus(STATUS_BOOKING, occ)
+        self.async_update_listeners()
+        self.config_entry.async_create_background_task(
+            self.hass, self._async_book(rule_id, occ), f"{DOMAIN}_book_{occ.id}"
+        )
+
+    async def _async_book(self, rule_id: str, occ: GroupActivity) -> None:
+        rule = next((r for r in self.rules if r.id == rule_id), None)
+        label = rule.label if rule else occ.name
+        error: str | None = None
+        result: dict | None = None
+        try:
+            for delay in (0, *RETRY_DELAYS):
+                if delay:
+                    await _sleep(delay)
+                try:
+                    result = await self.client.book(occ.id)
+                    error = None
+                    break
+                except API_ERRORS as err:
+                    error = str(err) or type(err).__name__
+                    _LOGGER.warning("Booking %s failed: %s", label, error)
+        finally:
+            self._in_progress.discard(occ.id)
+
+        state = self.rule_state.setdefault(rule_id, RuleState())
+        event_data = {
+            "rule": label,
+            "activity_id": occ.id,
+            "name": occ.name,
+            "center": occ.center_name,
+            "start": occ.start.isoformat(),
+        }
+        if error is None and result is not None:
+            waitlist = result.get("__typename") == "WaitingListBooking"
+            state.handled[occ.id] = {
+                "start": occ.start.isoformat(),
+                "result": "waitlist" if waitlist else "booked",
+            }
+            event_data["waiting_list"] = waitlist
+            event_data["waiting_list_position"] = result.get("waitingListPosition")
+            self.hass.bus.async_fire(EVENT_BOOKED, event_data)
+            self.statuses[rule_id] = RuleStatus(STATUS_WAITLIST if waitlist else STATUS_BOOKED, occ)
+        else:
+            state.handled[occ.id] = {
+                "start": occ.start.isoformat(),
+                "result": "failed",
+                "error": error or "unknown",
+            }
+            self.hass.bus.async_fire(EVENT_BOOKING_FAILED, {**event_data, "error": error})
+            self.statuses[rule_id] = RuleStatus(STATUS_FAILED, occ, error=error)
+
+        await self._async_after_state_change()
+        await self.async_request_refresh()
+
+    # -- actions used by entities and services -----------------------------
+
+    async def async_set_enabled(self, rule_id: str, enabled: bool) -> None:
+        state = self.rule_state.setdefault(rule_id, RuleState())
+        state.enabled = enabled
+        if enabled:
+            # Resuming gives failed occurrences a new chance.
+            state.handled = {k: v for k, v in state.handled.items() if v["result"] != "failed"}
+        await self._async_after_state_change()
+
+    async def async_set_skip(self, rule_id: str, skip: bool) -> None:
+        state = self.rule_state.setdefault(rule_id, RuleState())
+        status = self.statuses.get(rule_id)
+        occ = status.occurrence if status else None
+        state.skip_activity_id = occ.id if skip and occ else None
+        await self._async_after_state_change()
+
+    async def _async_after_state_change(self) -> None:
+        await self._async_save_state()
+        if self.data is not None:
+            self._evaluate(self.data)
+        self.async_update_listeners()
+
+    async def async_book(self, activity_id: str) -> dict:
+        try:
+            result = await self.client.book(activity_id)
+        except API_ERRORS as err:
+            raise HomeAssistantError(f"Booking failed: {err}") from err
+        await self.async_request_refresh()
+        return result
+
+    async def async_cancel(self, booking_id: str) -> None:
+        bookings = self.data.bookings if self.data else []
+        booking = next((b for b in bookings if b.id == booking_id), None)
+        if booking is None:
+            raise HomeAssistantError(f"Unknown booking {booking_id}")
+        if not booking.can_cancel:
+            raise HomeAssistantError(f"Booking cannot be cancelled ({booking.cancel_code})")
+        try:
+            await self.client.cancel(booking)
+        except API_ERRORS as err:
+            raise HomeAssistantError(f"Cancellation failed: {err}") from err
+        await self.async_request_refresh()

@@ -1,0 +1,123 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Logg inn på 3T",
+        "description": "Bruk samme e-post og passord som på 3t.no.",
+        "data": {
+          "username": "E-post",
+          "password": "Passord"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Logg inn på nytt",
+        "description": "Innloggingen for {username} er ikke lenger gyldig.",
+        "data": {
+          "password": "Passord"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Feil e-post eller passord.",
+      "cannot_connect": "Fikk ikke kontakt med 3T."
+    },
+    "abort": {
+      "already_configured": "Denne kontoen er allerede lagt til.",
+      "reauth_successful": "Innloggingen er oppdatert."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Faste bookinger",
+        "menu_options": {
+          "suggestions": "Forslag fra historikken min",
+          "add_center": "Velg fra timeplanen",
+          "remove": "Fjern faste bookinger"
+        }
+      },
+      "suggestions": {
+        "title": "Forslag fra historikken",
+        "description": "Timer du har booket minst to ganger det siste året (samme time, senter, ukedag og klokkeslett). Huk av de du vil booke automatisk hver uke.",
+        "data": {
+          "slots": "Forslag"
+        }
+      },
+      "add_center": {
+        "title": "Velg fra timeplanen",
+        "data": {
+          "center": "Senter",
+          "weekday": "Ukedag"
+        }
+      },
+      "add_class": {
+        "title": "Timer på {center}",
+        "description": "Timeplanen for {day}. Valgte timer bookes automatisk hver uke når bookingen åpner.",
+        "data": {
+          "classes": "Timer"
+        }
+      },
+      "remove": {
+        "title": "Fjern faste bookinger",
+        "description": "Eksisterende bookinger blir ikke avbestilt.",
+        "data": {
+          "rules": "Fjern"
+        }
+      }
+    },
+    "abort": {
+      "not_loaded": "Integrasjonen er ikke lastet.",
+      "cannot_connect": "Fikk ikke kontakt med 3T.",
+      "no_suggestions": "Fant ingen nye gjentakende timer i historikken.",
+      "no_classes": "Ingen timer den dagen på dette senteret."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "rule_status": {
+        "state": {
+          "planlagt": "Planlagt",
+          "bookes_naa": "Bookes nå",
+          "booket": "Booket",
+          "venteliste": "Venteliste",
+          "pauset": "Pauset",
+          "hoppet_over": "Hoppes over",
+          "avbestilt": "Avbestilt",
+          "feilet": "Feilet",
+          "stengt": "Booking stengt",
+          "ingen_time": "Ingen time funnet"
+        }
+      }
+    }
+  },
+  "services": {
+    "book": {
+      "name": "Book time",
+      "description": "Booker en gruppetime (eller venteliste hvis full).",
+      "fields": {
+        "activity_id": {
+          "name": "Aktivitets-ID",
+          "description": "ID fra timeplanen."
+        },
+        "config_entry_id": {
+          "name": "Konto",
+          "description": "Hvilken 3T-konto (valgfritt)."
+        }
+      }
+    },
+    "cancel": {
+      "name": "Avbestill",
+      "description": "Avbestiller en booking.",
+      "fields": {
+        "booking_id": {
+          "name": "Booking-ID",
+          "description": "ID fra en booking-sensor."
+        },
+        "config_entry_id": {
+          "name": "Konto",
+          "description": "Hvilken 3T-konto (valgfritt)."
+        }
+      }
+    }
+  }
+}
