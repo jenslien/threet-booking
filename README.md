@@ -56,7 +56,7 @@ Per fast time (egen enhet «3T fast: …»):
 |---|---|
 | `switch …_aktiv` | Av = pause, på = fortsett (gir også feilede forsøk en ny sjanse) |
 | `switch …_hopp_over_neste` | Hopper over neste forekomst og nullstilles av seg selv etterpå |
-| `sensor …_status` | planlagt / bookes nå / booket / venteliste / pauset / hoppes over / avbestilt / feilet / booking stengt / ingen time funnet |
+| `sensor …_status` | Status for neste time som skal bookes: planlagt / bookes nå / pauset / hoppes over / feilet / ingen time funnet. Allerede bookede timer ligger i attributtet `booked` |
 | `sensor …_neste_time` | Starttidspunkt for neste forekomst |
 | `sensor …_booking_apner` | Når bookingen åpner |
 
@@ -178,8 +178,10 @@ cards:
     title: Faste timer
     content: >-
       {% for s in states.sensor | selectattr('attributes.rule', 'defined') %}
-      **{{ s.attributes.rule }}** · {{ state_translated(s.entity_id) }}<br>
-      Neste: {{ s.attributes.next_class or '–' }} · bookes {{ s.attributes.booking_opens or '–' }}
+      **{{ s.attributes.rule }}**<br>
+      {% for b in s.attributes.booked %}✅ Booket {{ b }}<br>{% endfor %}
+      ⏭️ {{ s.attributes.next_class or '–' }} · {{ state_translated(s.entity_id) }}
+      {%- if s.state == 'planlagt' %} · bookes {{ s.attributes.booking_opens }}{% endif %}
       {% if not loop.last %}<hr>{% endif %}
       {% else %}
       Ingen faste timer ennå.

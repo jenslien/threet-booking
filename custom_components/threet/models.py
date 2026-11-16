@@ -112,6 +112,8 @@ class RuleStatus:
     """Computed status of a rule after the latest refresh."""
 
     status: str
-    occurrence: GroupActivity | None = None
+    occurrence: GroupActivity | None = None  # next occurrence to book (or awaiting booking)
     booking: Booking | None = None
     error: str | None = None
+    predicted: bool = False  # occurrence is next week's, not yet in the timetable
+    booked: list[RuleStatus] = field(default_factory=list)  # upcoming booked occurrences

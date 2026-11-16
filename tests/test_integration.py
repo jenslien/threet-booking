@@ -80,13 +80,21 @@ async def test_books_when_booking_opens_and_never_rebooks(
     assert hass.states.get("switch.3t_fast_spinn_60_3t_rosten_mandag_19_00_aktiv").state == "on"
     fake_client.book.assert_not_called()
 
-    # Booking opens -> exactly one booking call.
-    fake_client.get_my_bookings.return_value = [make_booking("b1", occ)]
+    # Booking opens -> exactly one booking call; afterwards 3T lists the booking.
+    async def _book(activity_id):
+        fake_client.get_my_bookings.return_value = [make_booking("b1", occ)]
+        return {"__typename": "GroupActivityBooking", "id": "b1"}
+
+    fake_client.book.side_effect = _book
     freezer.move_to(opens + timedelta(seconds=2))
     async_fire_time_changed(hass)
     await hass.async_block_till_done(wait_background_tasks=True)
     fake_client.book.assert_awaited_once_with("a1")
-    assert hass.states.get("sensor.3t_fast_spinn_60_3t_rosten_mandag_19_00_status").state == "booket"
+    status = hass.states.get("sensor.3t_fast_spinn_60_3t_rosten_mandag_19_00_status")
+    # This week's is booked; the status now looks ahead to next week's (predicted).
+    assert status.state == "planlagt"
+    assert len(status.attributes["booked"]) == 1
+    assert status.attributes["predicted"] is True
     assert hass.states.get("sensor.3t_booking_1").attributes["booking_id"] == "b1"
 
     # User cancels via the button -> status "avbestilt", no new booking.
@@ -98,7 +106,8 @@ async def test_books_when_booking_opens_and_never_rebooks(
     freezer.tick(timedelta(minutes=16))
     async_fire_time_changed(hass)
     await hass.async_block_till_done(wait_background_tasks=True)
-    assert hass.states.get("sensor.3t_fast_spinn_60_3t_rosten_mandag_19_00_status").state == "avbestilt"
+    status = hass.states.get("sensor.3t_fast_spinn_60_3t_rosten_mandag_19_00_status")
+    assert status.attributes["booked"] == []
     assert fake_client.book.await_count == 1
 
 
@@ -210,7 +219,8 @@ async def test_calendar_events_api(hass: HomeAssistant, fake_client, hass_client
     resp = await client.get("/api/calendars/calendar.3t_bookinger", params={"start": s, "end": e})
     assert resp.status == 200, await resp.text()
     events = await resp.json()
-    assert [ev["summary"] for ev in events] == ["Spinn 60", "Spinn 60 (planlagt)"]
+    # booked Monday, planned Tuesday, predicted next Monday
+    assert [ev["summary"] for ev in events] == ["Spinn 60", "Spinn 60 (planlagt)", "Spinn 60 (planlagt)"]
 
 
 async def test_cancel_button_name_and_too_late(hass: HomeAssistant, fake_client) -> None:
@@ -237,3 +247,27 @@ async def test_cancel_button_name_and_too_late(hass: HomeAssistant, fake_client)
             "button", "press", {"entity_id": "button.3t_avbestill_booking_2"}, blocking=True
         )
     fake_client.cancel.assert_not_called()
+
+
+async def test_books_next_week_while_this_week_is_booked(
+    hass: HomeAssistant, fake_client, freezer: FrozenDateTimeFactory
+) -> None:
+    """Next week's booking opens at 08:00 on the day of this week's class."""
+    await hass.config.async_set_time_zone("Europe/Oslo")
+    this_week = next_monday_19(dt_util.utcnow())
+    opens = dt_util.utcnow() + timedelta(hours=1)
+    a1 = make_activity("a1", this_week)
+    a2 = make_activity("a2", this_week + timedelta(weeks=1), opens=opens)
+    fake_client.get_my_bookings.return_value = [make_booking("b1", a1)]
+    fake_client.get_group_activities.return_value = [a1, a2]
+    await setup_entry(hass)
+
+    status = hass.states.get("sensor.3t_fast_spinn_60_3t_rosten_mandag_19_00_status")
+    assert status.state == "planlagt"
+    assert status.attributes["activity_id"] == "a2"
+    assert len(status.attributes["booked"]) == 1
+
+    freezer.move_to(opens + timedelta(seconds=2))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    fake_client.book.assert_awaited_once_with("a2")

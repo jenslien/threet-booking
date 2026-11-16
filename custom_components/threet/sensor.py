@@ -121,18 +121,25 @@ class RuleStatusSensor(ThreeTRuleEntity, SensorEntity):
         st = self.rule_status
         occ = st.occurrence if st else None
         tz = self.coordinator.tz
+        booked = []
+        for b in st.booked if st else []:
+            text = fmt_local(b.occurrence.start, tz)
+            if b.booking and b.booking.is_waiting_list:
+                text += f" (venteliste #{b.booking.waiting_list_position})"
+            booked.append(text)
         return {
             "rule": self.rule.label,
+            "booked": booked,
             "next_class": fmt_local(occ.start, tz) if occ else None,
             "booking_opens": fmt_local(occ.bookable_earliest, tz) if occ else None,
-            "activity_id": occ.id if occ else None,
+            "predicted": st.predicted if st else False,
+            "activity_id": occ.id if occ and not st.predicted else None,
             "start": occ.start.isoformat() if occ else None,
             "bookable_earliest": occ.bookable_earliest.isoformat()
             if occ and occ.bookable_earliest
             else None,
             "slots_available": occ.slots_available if occ else None,
             "slots_total": occ.slots_total if occ else None,
-            "booking_id": st.booking.id if st and st.booking else None,
             "error": st.error if st else None,
         }
 

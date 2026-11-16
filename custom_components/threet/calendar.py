@@ -12,6 +12,7 @@ from homeassistant.util import dt as dt_util
 from . import ThreeTConfigEntry
 from .const import STATUS_PLANNED
 from .entity import ThreeTAccountEntity
+from .models import fmt_local
 from .threet_api import GroupActivity
 
 
@@ -50,7 +51,7 @@ class ThreeTCalendar(ThreeTAccountEntity, CalendarEntity):
             occ = status.occurrence
             if status.status == STATUS_PLANNED and occ and occ.id not in booked:
                 opens = occ.bookable_earliest
-                desc = f"Bookes automatisk {dt_util.as_local(opens):%a %d.%m %H:%M}" if opens else ""
+                desc = f"Bookes automatisk {fmt_local(opens, self.coordinator.tz)}" if opens else ""
                 events.append(_event(occ, f"{occ.name} (planlagt)", desc))
         return sorted(events, key=lambda e: e.start)
 

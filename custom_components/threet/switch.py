@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import ThreeTConfigEntry
-from .const import STATUS_BOOKED, STATUS_BOOKING, STATUS_WAITLIST
+from .const import STATUS_BOOKING
 from .entity import ThreeTRuleEntity
 
 
@@ -60,7 +60,8 @@ class RuleSkipNextSwitch(ThreeTRuleEntity, SwitchEntity):
             super().available
             and st is not None
             and st.occurrence is not None
-            and st.status not in (STATUS_BOOKED, STATUS_WAITLIST, STATUS_BOOKING)
+            and not st.predicted
+            and st.status != STATUS_BOOKING
         )
 
     @property

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -86,7 +86,7 @@ class ThreeTCoordinator(DataUpdateCoordinator[ThreeTData]):
         self.rule_state: dict[str, RuleState] = {}
         self.statuses: dict[str, RuleStatus] = {}
         self._store: Store[dict] = Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}")
-        self._timers: dict[str, tuple[str, CALLBACK_TYPE]] = {}
+        self._timers: dict[str, CALLBACK_TYPE] = {}  # activity_id -> unsubscribe
         self._in_progress: set[str] = set()
 
     # -- persistence -------------------------------------------------------
@@ -128,19 +128,39 @@ class ThreeTCoordinator(DataUpdateCoordinator[ThreeTData]):
 
     # -- rule evaluation and scheduling ------------------------------------
 
-    def _next_occurrence(self, rule: Rule, data: ThreeTData) -> GroupActivity | None:
+    def _occurrences(self, rule: Rule, data: ThreeTData) -> list[GroupActivity]:
         now = dt_util.utcnow()
-        candidates = [
-            a
-            for a in data.timetable.get(rule.center_id, [])
-            if a.start > now and rule.matches(a, self.tz)
-        ]
-        return min(candidates, key=lambda a: a.start, default=None)
+        return sorted(
+            (
+                a
+                for a in data.timetable.get(rule.center_id, [])
+                if a.start > now and rule.matches(a, self.tz)
+            ),
+            key=lambda a: a.start,
+        )
+
+    @staticmethod
+    def _predict_next_week(occ: GroupActivity) -> GroupActivity:
+        """The following week's occurrence, before it shows up in the timetable."""
+        week = timedelta(days=7)
+        start = occ.start + week
+        return replace(
+            occ,
+            id=f"predicted-{occ.id}",
+            start=start,
+            end=occ.end + week if occ.end else None,
+            bookable_earliest=occ.bookable_earliest + week if occ.bookable_earliest else None,
+            bookable_latest=occ.bookable_latest + week if occ.bookable_latest else None,
+            slots_available=None,
+            raw_start=start.isoformat(),
+        )
 
     @callback
     def _evaluate(self, data: ThreeTData) -> None:
+        """Compute rule statuses and (re)schedule a booking for every open-able occurrence."""
         now = dt_util.utcnow()
         booked = {b.activity_id: b for b in data.bookings if b.kind != "NoShowBooking"}
+        wanted: dict[str, tuple[str, GroupActivity]] = {}
 
         for rule in self.rules:
             state = self.rule_state.setdefault(rule.id, RuleState())
@@ -150,26 +170,44 @@ class ThreeTCoordinator(DataUpdateCoordinator[ThreeTData]):
                 for aid, h in state.handled.items()
                 if dt_util.parse_datetime(h["start"]) > now - timedelta(days=1)
             }
-            occ = self._next_occurrence(rule, data)
-            self.statuses[rule.id] = status = self._status_for(rule, state, occ, booked, now)
-            if status.status == STATUS_PLANNED:
-                self._schedule(rule, occ, now)
-            else:
-                self._cancel_timer(rule.id)
+            occs = self._occurrences(rule, data)
+            done: list[RuleStatus] = []
+            pending: list[RuleStatus] = []
+            for occ in occs:
+                st = self._status_for(rule, state, occ, booked, now)
+                (done if st.status in (STATUS_BOOKED, STATUS_WAITLIST) else pending).append(st)
+                if st.status == STATUS_PLANNED:
+                    wanted[occ.id] = (rule.id, occ)
 
-        for rule_id in set(self._timers) - {r.id for r in self.rules}:
-            self._cancel_timer(rule_id)
+            # Show the next occurrence that still needs (or awaits) booking; occurrences the
+            # user cancelled or that closed are history. Fall back to a prediction for next week.
+            display = next(
+                (st for st in pending if st.status not in (STATUS_CANCELLED, STATUS_CLOSED)), None
+            )
+            if display is None and occs:
+                display = RuleStatus(
+                    STATUS_PLANNED if state.enabled else STATUS_PAUSED,
+                    self._predict_next_week(occs[-1]),
+                    predicted=True,
+                )
+            if display is None:
+                display = RuleStatus(STATUS_NO_CLASS)
+            display.booked = done
+            self.statuses[rule.id] = display
+
+        for activity_id in set(self._timers) - set(wanted):
+            self._cancel_timer(activity_id)
+        for rule_id, occ in wanted.values():
+            self._schedule(rule_id, occ, now)
 
     def _status_for(
         self,
         rule: Rule,
         state: RuleState,
-        occ: GroupActivity | None,
+        occ: GroupActivity,
         booked: dict[str, Booking],
         now: datetime,
     ) -> RuleStatus:
-        if occ is None:
-            return RuleStatus(STATUS_NO_CLASS)
         if booking := booked.get(occ.id):
             # Remember it, so a later cancellation (here or on 3t.no) is never auto-rebooked.
             if state.handled.get(occ.id, {}).get("result") != "seen_booked":
@@ -179,61 +217,60 @@ class ThreeTCoordinator(DataUpdateCoordinator[ThreeTData]):
             return RuleStatus(status, occ, booking)
         if occ.id in self._in_progress:
             return RuleStatus(STATUS_BOOKING, occ)
-        if not state.enabled:
-            return RuleStatus(STATUS_PAUSED, occ)
-        if state.skip_activity_id == occ.id:
-            return RuleStatus(STATUS_SKIPPED, occ)
         if handled := state.handled.get(occ.id):
-            if handled["result"] == "failed":
-                return RuleStatus(STATUS_FAILED, occ, error=handled.get("error"))
             if handled["result"] in ("booked", "waitlist"):
                 # Booked by us, not yet visible in the bookings list (refresh pending).
                 waitlist = handled["result"] == "waitlist"
                 return RuleStatus(STATUS_WAITLIST if waitlist else STATUS_BOOKED, occ)
-            # Booked earlier but no longer booked: the user cancelled. Don't rebook.
-            return RuleStatus(STATUS_CANCELLED, occ)
+            if handled["result"] == "seen_booked":
+                # Booked earlier but no longer booked: the user cancelled. Don't rebook.
+                return RuleStatus(STATUS_CANCELLED, occ)
+        if not state.enabled:
+            return RuleStatus(STATUS_PAUSED, occ)
+        if state.skip_activity_id == occ.id:
+            return RuleStatus(STATUS_SKIPPED, occ)
+        if handled and handled["result"] == "failed":
+            return RuleStatus(STATUS_FAILED, occ, error=handled.get("error"))
         if occ.bookable_latest and now > occ.bookable_latest:
             return RuleStatus(STATUS_CLOSED, occ)
         return RuleStatus(STATUS_PLANNED, occ)
 
     @callback
-    def _schedule(self, rule: Rule, occ: GroupActivity, now: datetime) -> None:
-        existing = self._timers.get(rule.id)
-        if existing and existing[0] == occ.id:
+    def _schedule(self, rule_id: str, occ: GroupActivity, now: datetime) -> None:
+        if occ.id in self._timers or occ.id in self._in_progress:
             return
-        self._cancel_timer(rule.id)
-
         opens = occ.bookable_earliest or now
         when = opens + timedelta(seconds=BOOKING_OFFSET_SECONDS)
         if when <= now:
-            self._start_booking(rule.id, occ)
+            self._start_booking(rule_id, occ)
             return
 
         @callback
         def _fire(_now: datetime) -> None:
-            self._timers.pop(rule.id, None)
-            self._start_booking(rule.id, occ)
+            self._timers.pop(occ.id, None)
+            self._start_booking(rule_id, occ)
+            if self.data is not None:
+                self._evaluate(self.data)
+            self.async_update_listeners()
 
-        _LOGGER.debug("Scheduling %s (%s) at %s", rule.label, occ.id, when)
-        self._timers[rule.id] = (occ.id, async_track_point_in_utc_time(self.hass, _fire, when))
+        _LOGGER.debug("Scheduling %s at %s", occ.id, when)
+        self._timers[occ.id] = async_track_point_in_utc_time(self.hass, _fire, when)
 
     @callback
-    def _cancel_timer(self, rule_id: str) -> None:
-        if timer := self._timers.pop(rule_id, None):
-            timer[1]()
+    def _cancel_timer(self, activity_id: str) -> None:
+        if unsub := self._timers.pop(activity_id, None):
+            unsub()
 
     @callback
     def cancel_all_timers(self) -> None:
-        for rule_id in list(self._timers):
-            self._cancel_timer(rule_id)
+        for activity_id in list(self._timers):
+            self._cancel_timer(activity_id)
 
     @callback
     def _start_booking(self, rule_id: str, occ: GroupActivity) -> None:
         if occ.id in self._in_progress:
             return
         self._in_progress.add(occ.id)
-        self.statuses[rule_id] = RuleStatus(STATUS_BOOKING, occ)
-        self.async_update_listeners()
         self.config_entry.async_create_background_task(
             self.hass, self._async_book(rule_id, occ), f"{DOMAIN}_book_{occ.id}"
         )
@@ -274,7 +311,10 @@ class ThreeTCoordinator(DataUpdateCoordinator[ThreeTData]):
             event_data["waiting_list"] = waitlist
             event_data["waiting_list_position"] = result.get("waitingListPosition")
             self.hass.bus.async_fire(EVENT_BOOKED, event_data)
-            self.statuses[rule_id] = RuleStatus(STATUS_WAITLIST if waitlist else STATUS_BOOKED, occ)
+            if self.data is None:
+                self.statuses[rule_id] = RuleStatus(
+                    STATUS_WAITLIST if waitlist else STATUS_BOOKED, occ
+                )
         else:
             state.handled[occ.id] = {
                 "start": occ.start.isoformat(),
@@ -282,7 +322,8 @@ class ThreeTCoordinator(DataUpdateCoordinator[ThreeTData]):
                 "error": error or "unknown",
             }
             self.hass.bus.async_fire(EVENT_BOOKING_FAILED, {**event_data, "error": error})
-            self.statuses[rule_id] = RuleStatus(STATUS_FAILED, occ, error=error)
+            if self.data is None:
+                self.statuses[rule_id] = RuleStatus(STATUS_FAILED, occ, error=error)
 
         await self._async_after_state_change()
         await self.async_request_refresh()
