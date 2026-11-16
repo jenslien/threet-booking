@@ -12,7 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from . import ThreeTConfigEntry
 from .const import BOOKING_SLOTS, RULE_STATUSES
 from .entity import ThreeTAccountEntity, ThreeTRuleEntity
-from .models import fmt_local
+from .models import activity_details, booking_details, fmt_local
 from .threet_api import Booking
 
 
@@ -45,6 +45,9 @@ def booking_attributes(b: Booking) -> dict[str, Any]:
         "waiting_list_position": b.waiting_list_position,
         "can_cancel": b.can_cancel,
         "cancel_code": b.cancel_code or None,
+        "slots_available": a.slots_available if a else None,
+        "slots_total": a.slots_total if a else None,
+        "details": booking_details(b),
     }
 
 
@@ -136,6 +139,7 @@ class RuleStatusSensor(ThreeTRuleEntity, SensorEntity):
             "next_class": fmt_local(occ.start, tz) if occ else None,
             "booking_opens": fmt_local(occ.bookable_earliest, tz) if occ else None,
             "predicted": st.predicted if st else False,
+            "details": activity_details(occ) if occ and not st.predicted else None,
             "activity_id": occ.id if occ and not st.predicted else None,
             "start": occ.start.isoformat() if occ else None,
             "bookable_earliest": occ.bookable_earliest.isoformat()

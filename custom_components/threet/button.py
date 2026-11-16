@@ -14,7 +14,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from . import ThreeTConfigEntry
 from .const import BOOKING_SLOTS
 from .entity import ThreeTAccountEntity
-from .models import booking_title, fmt_local
+from .models import booking_details, booking_title, fmt_local
 from .threet_api import Booking
 
 
@@ -63,8 +63,7 @@ class CancelBookingButton(ThreeTAccountEntity, ButtonEntity):
         b = self._booking
         if b is None:
             return f"3T booking {self.index + 1} (ledig)"
-        title = booking_title(b, self.coordinator.tz)
-        return title if b.can_cancel else f"{title} · kan ikke avbestilles"
+        return booking_title(b, self.coordinator.tz)
 
     @property
     def available(self) -> bool:
@@ -79,6 +78,11 @@ class CancelBookingButton(ThreeTAccountEntity, ButtonEntity):
             "booking_id": b.id,
             "title": f"{b.activity.name} – {b.activity.center_name}",
             "when": fmt_local(b.activity.start, self.coordinator.tz),
+            "details": booking_details(b),
+            "instructors": ", ".join(b.activity.instructors),
+            "slots_available": b.activity.slots_available,
+            "slots_total": b.activity.slots_total,
+            "waiting_list_position": b.waiting_list_position,
             "can_cancel": b.can_cancel,
         }
 

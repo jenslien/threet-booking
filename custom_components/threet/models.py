@@ -23,13 +23,34 @@ def fmt_local(dt: datetime | None, tz: tzinfo) -> str | None:
 
 
 def booking_title(booking: Booking, tz: tzinfo) -> str:
+    """E.g. "tir. 17.11 kl. 19:55  Styrke Total 45"."""
     a = booking.activity
     if a is None:
         return f"Booking {booking.id}"
-    title = f"{fmt_local(a.start, tz)}  {a.name} – {a.center_name}"
+    return f"{fmt_local(a.start, tz)}  {a.name}"
+
+
+def activity_details(a: GroupActivity) -> str:
+    """E.g. "3T-Rosten · Kari Nordmann · 27 av 50 ledige"."""
+    parts = [a.center_name]
+    if a.instructors:
+        parts.append(", ".join(a.instructors))
+    if a.slots_total is not None and a.slots_available is not None:
+        parts.append(
+            f"{a.slots_available} av {a.slots_total} ledige" if a.slots_available else "fullt"
+        )
+    return " · ".join(p for p in parts if p)
+
+
+def booking_details(booking: Booking) -> str:
+    parts = []
     if booking.is_waiting_list:
-        title += f" (venteliste #{booking.waiting_list_position})"
-    return title
+        parts.append(f"Venteliste #{booking.waiting_list_position}")
+    if booking.activity:
+        parts.append(activity_details(booking.activity))
+    if not booking.can_cancel:
+        parts.append("kan ikke avbestilles")
+    return " · ".join(parts)
 
 
 @dataclass(frozen=True)
