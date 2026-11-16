@@ -6,7 +6,10 @@ DOMAIN = "threet"
 
 CONF_RULES = "rules"
 
-UPDATE_INTERVAL = timedelta(minutes=15)
+# Keep the load on 3T's API low: bookings hourly, the (rarely changing) timetable every 6 h.
+UPDATE_INTERVAL = timedelta(hours=1)
+TIMETABLE_INTERVAL = timedelta(hours=6)
+# Classes open 7 days ahead at 08:00; 8 days ahead covers every opening within TIMETABLE_INTERVAL.
 LOOKAHEAD_DAYS = 8
 HISTORY_DAYS = 365
 BOOKING_SLOTS = 6  # max 5 bookings + some room for waiting lists

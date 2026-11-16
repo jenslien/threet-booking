@@ -35,6 +35,7 @@ from .const import (
     STATUS_PLANNED,
     STATUS_SKIPPED,
     STATUS_WAITLIST,
+    TIMETABLE_INTERVAL,
     UPDATE_INTERVAL,
 )
 from .models import Rule, RuleState, RuleStatus
@@ -88,6 +89,8 @@ class ThreeTCoordinator(DataUpdateCoordinator[ThreeTData]):
         self._store: Store[dict] = Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}")
         self._timers: dict[str, CALLBACK_TYPE] = {}  # activity_id -> unsubscribe
         self._in_progress: set[str] = set()
+        self._timetable: dict[str, list[GroupActivity]] = {}
+        self._timetable_fetched: datetime | None = None
 
     # -- persistence -------------------------------------------------------
 
@@ -109,20 +112,28 @@ class ThreeTCoordinator(DataUpdateCoordinator[ThreeTData]):
 
     async def _async_update_data(self) -> ThreeTData:
         now = dt_util.utcnow()
-        today = now.astimezone(self.tz).date()
+        centers = sorted({r.center_id for r in self.rules})
+        refresh_timetable = (
+            self._timetable_fetched is None
+            or now - self._timetable_fetched >= TIMETABLE_INTERVAL
+            or set(centers) != set(self._timetable)
+        )
         try:
             bookings = await self.client.get_my_bookings(now - timedelta(days=1))
-            timetable = {}
-            for center_id in sorted({r.center_id for r in self.rules}):
-                timetable[center_id] = await self.client.get_group_activities(
-                    [center_id], today, today + timedelta(days=LOOKAHEAD_DAYS), take=500
-                )
+            if refresh_timetable:
+                today = now.astimezone(self.tz).date()
+                timetable = {}
+                for center_id in centers:
+                    timetable[center_id] = await self.client.get_group_activities(
+                        [center_id], today, today + timedelta(days=LOOKAHEAD_DAYS), take=500
+                    )
+                self._timetable, self._timetable_fetched = timetable, now
         except ThreeTAuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
         except API_ERRORS as err:
             raise UpdateFailed(f"Error talking to 3T: {err}") from err
 
-        data = ThreeTData(bookings=bookings, timetable=timetable)
+        data = ThreeTData(bookings=bookings, timetable=self._timetable)
         self._evaluate(data)
         return data
 

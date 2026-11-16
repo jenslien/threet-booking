@@ -103,7 +103,7 @@ async def test_books_when_booking_opens_and_never_rebooks(
     )
     fake_client.cancel.assert_awaited_once()
     fake_client.get_my_bookings.return_value = []
-    freezer.tick(timedelta(minutes=16))
+    freezer.tick(timedelta(minutes=61))
     async_fire_time_changed(hass)
     await hass.async_block_till_done(wait_background_tasks=True)
     status = hass.states.get("sensor.3t_fast_spinn_60_3t_rosten_mandag_19_00_status")
@@ -271,3 +271,23 @@ async def test_books_next_week_while_this_week_is_booked(
     async_fire_time_changed(hass)
     await hass.async_block_till_done(wait_background_tasks=True)
     fake_client.book.assert_awaited_once_with("a2")
+
+
+async def test_api_traffic_per_day(hass: HomeAssistant, fake_client, freezer) -> None:
+    """Keep the load low: bookings hourly, timetable every 6 hours, nothing else."""
+    await hass.config.async_set_time_zone("Europe/Oslo")
+    await setup_entry(hass)  # one rule, one center
+    fake_client.get_my_bookings.reset_mock()
+    fake_client.get_group_activities.reset_mock()
+    for _ in range(24 * 6):  # one day in 10-minute steps
+        freezer.tick(timedelta(minutes=10))
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done()
+    assert fake_client.get_my_bookings.await_count == 24
+    assert fake_client.get_group_activities.await_count == 4
+    fake_client.book.assert_not_called()
+
+
+async def test_no_timetable_calls_without_rules(hass: HomeAssistant, fake_client) -> None:
+    await setup_entry(hass, rules=())
+    fake_client.get_group_activities.assert_not_called()

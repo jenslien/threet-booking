@@ -203,5 +203,6 @@ og kan endres uten varsel.
 Anbefalinger:
 - Book kun for egen konto, og bare timer du faktisk skal på (no-show koster 60 kr).
 - Lav frekvens: ett kall rett etter `bookableEarliest`, med få og spredte retries.
-  Ikke poll timeplanen oftere enn hvert 10.–15. minutt.
+  Integrasjonen henter bookinger hver time og timeplanen hver 6. time
+  (ca. 28 kall i døgnet med ett senter).
 - Vurder å spørre 3T kundeservice om de har innvendinger.

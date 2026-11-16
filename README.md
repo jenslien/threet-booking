@@ -38,9 +38,9 @@ Oppdateringer dukker opp i Marketplace når det publiseres en ny GitHub-release.
 
 ## Slik virker det
 
-En fast time er en ukentlig regel (time, senter, ukedag, klokkeslett). Hvert
-15. minutt henter integrasjonen dine bookinger og timeplanen for sentrene du har
-regler på. For hver regel finnes neste forekomst, og et kall planlegges til
+En fast time er en ukentlig regel (time, senter, ukedag, klokkeslett).
+Integrasjonen henter bookingene dine én gang i timen og timeplanen (bare for
+sentrene du har regler på) hver 6. time. For hver regel finnes neste forekomst, og et kall planlegges til
 `bookableEarliest` (kl. 08:00 sju dager før), med opptil 3 nye forsøk
 (5 s, 20 s og 60 s). Er bookingen allerede åpen når regelen legges til, bookes
 timen med en gang.
@@ -71,6 +71,14 @@ Konto (enhet «3T»):
 
 Tjenester: `threet.book` (`activity_id`) og `threet.cancel` (`booking_id`).
 Hendelser: `threet_booked` og `threet_booking_failed`, som kan brukes til varsler.
+
+### Trafikk mot 3T
+
+Med ett senter blir det omtrent 28 kall i døgnet: 24 for bookinger og 4 for
+timeplanen. I tillegg kommer innlogging ved oppstart og ellers hver 7. dag, og
+1–4 kall per booking (ett forsøk pluss opptil 3 nye) samt én henting av
+bookinger etterpå. Avbestilling gir ett kall pluss én henting av bookinger.
+Endringer du gjør på 3t.no vises innen en time.
 
 ### Dashbord: bookinger og faste timer
 
