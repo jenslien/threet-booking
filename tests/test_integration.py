@@ -193,3 +193,47 @@ async def test_options_pick_from_timetable(hass: HomeAssistant, fake_client) -> 
     result = await hass.config_entries.options.async_configure(result["flow_id"], {"classes": ["a9"]})
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert entry.options[CONF_RULES][0]["time"] == "19:00"
+
+
+async def test_calendar_events_api(hass: HomeAssistant, fake_client, hass_client) -> None:
+    await hass.config.async_set_time_zone("Europe/Oslo")
+    start = next_monday_19(dt_util.utcnow())
+    booked = make_activity("a1", start)
+    planned = make_activity("a2", start + timedelta(days=1), opens=dt_util.utcnow() + timedelta(days=1))
+    fake_client.get_my_bookings.return_value = [make_booking("b1", booked)]
+    fake_client.get_group_activities.return_value = [booked, planned]
+    await setup_entry(hass, rules=(RULE, {**RULE, "id": "r2", "weekday": 1}))
+
+    client = await hass_client()
+    s = (dt_util.utcnow() - timedelta(days=1)).isoformat()
+    e = (dt_util.utcnow() + timedelta(days=14)).isoformat()
+    resp = await client.get("/api/calendars/calendar.3t_bookinger", params={"start": s, "end": e})
+    assert resp.status == 200, await resp.text()
+    events = await resp.json()
+    assert [ev["summary"] for ev in events] == ["Spinn 60", "Spinn 60 (planlagt)"]
+
+
+async def test_cancel_button_name_and_too_late(hass: HomeAssistant, fake_client) -> None:
+    import pytest
+    from homeassistant.exceptions import HomeAssistantError
+
+    await hass.config.async_set_time_zone("Europe/Oslo")
+    a = make_activity("a1", next_monday_19(dt_util.utcnow()))
+    b = make_booking("b1", a)
+    late = make_booking("b2", make_activity("a2", next_monday_19(dt_util.utcnow()) + timedelta(days=1)))
+    late = type(late)(**{**late.__dict__, "can_cancel": False, "cancel_code": "TOO_LATE_TO_CANCEL"})
+    fake_client.get_my_bookings.return_value = [b, late]
+    await setup_entry(hass, rules=())
+
+    s1 = hass.states.get("button.3t_avbestill_booking_1")
+    assert s1.attributes["friendly_name"].startswith("man. ")
+    assert s1.attributes["friendly_name"].endswith("kl. 19:00  Spinn 60 – 3T-Rosten")
+    s2 = hass.states.get("button.3t_avbestill_booking_2")
+    assert s2.attributes["friendly_name"].endswith("kan ikke avbestilles")
+    assert hass.states.get("button.3t_avbestill_booking_3").state == "unavailable"
+
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            "button", "press", {"entity_id": "button.3t_avbestill_booking_2"}, blocking=True
+        )
+    fake_client.cancel.assert_not_called()

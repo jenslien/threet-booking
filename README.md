@@ -72,18 +72,120 @@ Konto (enhet «3T»):
 Tjenester: `threet.book` (`activity_id`) og `threet.cancel` (`booking_id`).
 Hendelser: `threet_booked` og `threet_booking_failed`, som kan brukes til varsler.
 
-### Avbestillingsknapp med bekreftelse (dashbord)
+### Dashbord: bookinger og faste timer
+
+Én linje per kommende booking med avbestill-knapp på samme linje, og en liste
+over de faste timene med status og når de bookes. Bytt ut entitets-ID-ene hvis
+dine har fått et prefiks (f.eks. `button.gang_3t_...` når enheten ligger i et område).
 
 ```yaml
-type: tile
-entity: sensor.3t_booking_1
-tap_action:
-  action: perform-action
-  perform_action: button.press
-  target:
-    entity_id: button.3t_avbestill_booking_1
-  confirmation:
-    text: Avbestille denne timen?
+type: vertical-stack
+cards:
+  - type: entities
+    title: Mine 3T-bookinger
+    entities:
+      - type: conditional
+        conditions:
+          - entity: button.3t_avbestill_booking_1
+            state_not: unavailable
+        row:
+          type: button
+          entity: button.3t_avbestill_booking_1
+          action_name: Avbestill
+          tap_action:
+            action: perform-action
+            perform_action: button.press
+            target:
+              entity_id: button.3t_avbestill_booking_1
+            confirmation:
+              text: Avbestille denne timen?
+      - type: conditional
+        conditions:
+          - entity: button.3t_avbestill_booking_2
+            state_not: unavailable
+        row:
+          type: button
+          entity: button.3t_avbestill_booking_2
+          action_name: Avbestill
+          tap_action:
+            action: perform-action
+            perform_action: button.press
+            target:
+              entity_id: button.3t_avbestill_booking_2
+            confirmation:
+              text: Avbestille denne timen?
+      - type: conditional
+        conditions:
+          - entity: button.3t_avbestill_booking_3
+            state_not: unavailable
+        row:
+          type: button
+          entity: button.3t_avbestill_booking_3
+          action_name: Avbestill
+          tap_action:
+            action: perform-action
+            perform_action: button.press
+            target:
+              entity_id: button.3t_avbestill_booking_3
+            confirmation:
+              text: Avbestille denne timen?
+      - type: conditional
+        conditions:
+          - entity: button.3t_avbestill_booking_4
+            state_not: unavailable
+        row:
+          type: button
+          entity: button.3t_avbestill_booking_4
+          action_name: Avbestill
+          tap_action:
+            action: perform-action
+            perform_action: button.press
+            target:
+              entity_id: button.3t_avbestill_booking_4
+            confirmation:
+              text: Avbestille denne timen?
+      - type: conditional
+        conditions:
+          - entity: button.3t_avbestill_booking_5
+            state_not: unavailable
+        row:
+          type: button
+          entity: button.3t_avbestill_booking_5
+          action_name: Avbestill
+          tap_action:
+            action: perform-action
+            perform_action: button.press
+            target:
+              entity_id: button.3t_avbestill_booking_5
+            confirmation:
+              text: Avbestille denne timen?
+      - type: conditional
+        conditions:
+          - entity: button.3t_avbestill_booking_6
+            state_not: unavailable
+        row:
+          type: button
+          entity: button.3t_avbestill_booking_6
+          action_name: Avbestill
+          tap_action:
+            action: perform-action
+            perform_action: button.press
+            target:
+              entity_id: button.3t_avbestill_booking_6
+            confirmation:
+              text: Avbestille denne timen?
+  - type: markdown
+    title: Faste timer
+    content: >-
+      {% for s in states.sensor | selectattr('attributes.rule', 'defined') %}
+      **{{ s.attributes.rule }}** · {{ state_translated(s.entity_id) }}<br>
+      Neste: {{ s.attributes.next_class or '–' }} · bookes {{ s.attributes.booking_opens or '–' }}
+      {% if not loop.last %}<hr>{% endif %}
+      {% else %}
+      Ingen faste timer ennå.
+      {% endfor %}
+
+      [➕ Legg til / fjern faste timer](/config/integrations/integration/threet)
 ```
 
 ### Varsel ved booking

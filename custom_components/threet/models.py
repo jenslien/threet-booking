@@ -4,11 +4,32 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import asdict, dataclass, field
-from datetime import tzinfo
+from datetime import datetime, tzinfo
 from typing import Any
 
 from .threet_api import Booking, GroupActivity
 from .threet_api.suggest import WEEKDAYS, SlotKey
+
+
+SHORT_WEEKDAYS = ["man.", "tir.", "ons.", "tor.", "fre.", "lør.", "søn."]
+
+
+def fmt_local(dt: datetime | None, tz: tzinfo) -> str | None:
+    """E.g. "man. 23.11 kl. 19:00"."""
+    if dt is None:
+        return None
+    local = dt.astimezone(tz)
+    return f"{SHORT_WEEKDAYS[local.weekday()]} {local:%d.%m} kl. {local:%H:%M}"
+
+
+def booking_title(booking: Booking, tz: tzinfo) -> str:
+    a = booking.activity
+    if a is None:
+        return f"Booking {booking.id}"
+    title = f"{fmt_local(a.start, tz)}  {a.name} – {a.center_name}"
+    if booking.is_waiting_list:
+        title += f" (venteliste #{booking.waiting_list_position})"
+    return title
 
 
 @dataclass(frozen=True)
