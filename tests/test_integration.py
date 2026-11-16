@@ -238,7 +238,7 @@ async def test_cancel_button_name_and_too_late(hass: HomeAssistant, fake_client)
     s1 = hass.states.get("button.3t_avbestill_booking_1")
     assert s1.attributes["friendly_name"].startswith("man. ")
     assert s1.attributes["friendly_name"].endswith("kl. 19:00  Spinn 60")
-    assert s1.attributes["details"] == "3T-Rosten · Instruktør · 10 av 30 ledige"
+    assert s1.attributes["details"] == "3T-Rosten, Instruktør, 10 av 30 ledige"
     s2 = hass.states.get("button.3t_avbestill_booking_2")
     assert s2.attributes["details"].endswith("kan ikke avbestilles")
     assert hass.states.get("button.3t_avbestill_booking_3").state == "unavailable"

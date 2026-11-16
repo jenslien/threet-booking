@@ -31,7 +31,7 @@ def booking_title(booking: Booking, tz: tzinfo) -> str:
 
 
 def activity_details(a: GroupActivity) -> str:
-    """E.g. "3T-Rosten · Kari Nordmann · 27 av 50 ledige"."""
+    """E.g. "3T-Rosten, Kari Nordmann, 27 av 50 ledige"."""
     parts = [a.center_name]
     if a.instructors:
         parts.append(", ".join(a.instructors))
@@ -39,7 +39,7 @@ def activity_details(a: GroupActivity) -> str:
         parts.append(
             f"{a.slots_available} av {a.slots_total} ledige" if a.slots_available else "fullt"
         )
-    return " · ".join(p for p in parts if p)
+    return ", ".join(p for p in parts if p)
 
 
 def booking_details(booking: Booking) -> str:
@@ -50,7 +50,7 @@ def booking_details(booking: Booking) -> str:
         parts.append(activity_details(booking.activity))
     if not booking.can_cancel:
         parts.append("kan ikke avbestilles")
-    return " · ".join(parts)
+    return ", ".join(parts)
 
 
 @dataclass(frozen=True)
