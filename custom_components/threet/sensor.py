@@ -12,6 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from . import ThreeTConfigEntry
 from .const import BOOKING_SLOTS, RULE_STATUSES
 from .entity import ThreeTAccountEntity, ThreeTRuleEntity
+from .stats_sensor import DESCRIPTIONS as STATS_DESCRIPTIONS, StatsSensor
 from .models import activity_details, booking_details, fmt_local
 from .threet_api import Booking
 
@@ -22,6 +23,8 @@ async def async_setup_entry(
     coordinator = entry.runtime_data.coordinator
     entities: list[SensorEntity] = [UpcomingCountSensor(coordinator)]
     entities += [BookingSlotSensor(coordinator, i) for i in range(BOOKING_SLOTS)]
+    stats = entry.runtime_data.stats
+    entities += [StatsSensor(stats, d) for d in STATS_DESCRIPTIONS]
     for rule in coordinator.rules:
         entities += [
             RuleStatusSensor(coordinator, rule),

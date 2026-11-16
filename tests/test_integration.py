@@ -279,14 +279,18 @@ async def test_api_traffic_per_day(hass: HomeAssistant, fake_client, freezer) ->
     """Keep the load low: bookings hourly, timetable every 6 hours, nothing else."""
     await hass.config.async_set_time_zone("Europe/Oslo")
     await setup_entry(hass)  # one rule, one center
+    await hass.async_block_till_done(wait_background_tasks=True)
     fake_client.get_my_bookings.reset_mock()
+    fake_client.get_workout_summary.reset_mock()
     fake_client.get_group_activities.reset_mock()
     for _ in range(24 * 6):  # one day in 10-minute steps
         freezer.tick(timedelta(minutes=10))
         async_fire_time_changed(hass)
         await hass.async_block_till_done()
-    assert fake_client.get_my_bookings.await_count == 24
+    # 24 hourly + 1 daily booking-history fetch for the statistics
+    assert fake_client.get_my_bookings.await_count == 25
     assert fake_client.get_group_activities.await_count == 4
+    assert fake_client.get_workout_summary.await_count == 4
     fake_client.book.assert_not_called()
 
 

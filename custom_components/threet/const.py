@@ -9,6 +9,8 @@ CONF_RULES = "rules"
 # Keep the load on 3T's API low: bookings hourly, the (rarely changing) timetable every 6 h.
 UPDATE_INTERVAL = timedelta(hours=1)
 TIMETABLE_INTERVAL = timedelta(hours=6)
+# Training statistics: 1 call per refresh (+ a few once a day).
+STATS_INTERVAL = timedelta(hours=6)
 # While on a waiting list, poll bookings more often as the class gets closer:
 # (time left until class start, polling interval). 3T stops moving people up
 # from the waiting list 2 hours before start, so fast polling ends there.

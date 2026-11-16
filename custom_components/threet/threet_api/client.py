@@ -84,6 +84,26 @@ mutation CancelBooking($bookingId: ID!, $activityStart: Dayjs!) {
   }
 }"""
 
+Q_WORKOUT_SUMMARY = """
+query WorkoutSummary {
+  GetTrainingGoal
+  UserWorkoutSummary {
+    period { start end }
+    visits
+    years {
+      year visits
+      months { month visits }
+      instructorPopularity { occurences instructor { page { title } } }
+    }
+    userWorkouts { workoutDate workoutName center { id page { title } } }
+  }
+}"""
+
+Q_VISITS = """
+query Visits($fromDate: Dayjs!, $toDate: Dayjs!) {
+  Visits(fromDate: $fromDate, toDate: $toDate)
+}"""
+
 Q_ACCESS_TOKEN = """
 query getAccessToken($password: String!, $username: String!) {
   AccessToken(password: $password, username: $username)
@@ -345,6 +365,21 @@ class ThreeTClient:
         variables = {"fromDate": from_date.isoformat()} if from_date else {}
         data = await self._request(Q_MY_BOOKINGS, variables)
         return [Booking.from_api(b) for b in data["CustomerGroupActivityBookings"]]
+
+    async def get_workout_summary(self) -> dict[str, Any]:
+        """Training goal + per-year/month visits and every workout since the summary start.
+
+        Returns {"goal": int|None, "summary": <UserWorkoutSummary>}.
+        """
+        data = await self._request(Q_WORKOUT_SUMMARY)
+        return {"goal": data.get("GetTrainingGoal"), "summary": data["UserWorkoutSummary"]}
+
+    async def get_visits(self, from_date: date, to_date: date) -> int:
+        """Number of visits from ``from_date`` up to (not including) ``to_date``."""
+        data = await self._request(
+            Q_VISITS, {"fromDate": from_date.isoformat(), "toDate": to_date.isoformat()}
+        )
+        return int(data["Visits"] or 0)
 
     # -- write operations (have side effects: real bookings / no-show fees) -
 

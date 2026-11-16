@@ -97,6 +97,48 @@ etter det går det tilbake til én gang i timen. Det blir rundt 160 ekstra kall 
 time du står på venteliste for. Gjeldende intervall vises i attributtet
 `poll_interval_minutes` på `sensor.3t_kommende_bookinger`.
 
+### Treningsstatistikk
+
+Rundt 30 sensorer på enheten «3T»: økter i år og i fjor til samme dato (med
+endring i %), prognose for året, siste 12 måneder mot de 12 før, totalt, beste
+år og måned, uke og måned, snitt per uke, treningsmål og ukemål, streaks (uker
+på rad med nådd mål og med trening), siste økt, favorittime, favorittinstruktør,
+favorittdag, tid på døgnet og senter, samt no-shows og no-show-gebyrer.
+
+Historikk: 3Ts treningssammendrag dekker de siste årene. Eldre år hentes én gang
+(backfill), måned for måned, og lagres lokalt. Alle måneder importeres som
+langtidsstatistikk (`threet:okter_<bruker-id>`, se attributtet `statistic_id`
+på «Økter totalt»), slik at et statistikk-graf-kort viser hele historikken:
+
+```yaml
+type: statistics-graph
+title: Økter per måned
+entities:
+  - threet:okter_<bruker-id>
+chart_type: bar
+period: month
+stat_types:
+  - change
+days_to_show: 1825
+```
+
+Sammenligning per år (bytt ut entitets-ID-ene med dine):
+
+```yaml
+type: markdown
+content: |
+  | År | Til samme dato | Hele året |
+  |:--|--:|--:|
+  {% set ytd = state_attr('sensor.3t_okter_i_ar', 'ytd_per_year') -%}
+  {% for y, n in state_attr('sensor.3t_okter_totalt', 'per_year').items() | reverse -%}
+  | {{ y }} | {{ ytd.get(y, '–') }} | {{ n }} |
+  {% endfor %}
+```
+
+Trafikk: 1 kall hver 6. time, pluss noen få én gang i døgnet (bookinghistorikk
+for no-shows, og «til samme dato» for år eldre enn sammendraget). Backfill av
+gamle år er rundt 12 kall per år, én gang, med en halv sekunds pause mellom kallene.
+
 ### Dashbord: bookinger og faste timer
 
 Én linje per kommende booking med avbestill-knapp på samme linje, og en liste

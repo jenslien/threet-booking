@@ -17,8 +17,19 @@ def auto_enable_custom_integrations(enable_custom_integrations):
 
 @pytest.fixture(autouse=True)
 def no_retry_delay():
-    with patch("custom_components.threet.coordinator._sleep", AsyncMock()):
+    with (
+        patch("custom_components.threet.coordinator._sleep", AsyncMock()),
+        patch("custom_components.threet.stats_coordinator._sleep", AsyncMock()),
+    ):
         yield
+
+
+EMPTY_SUMMARY = {
+    "period": {"start": "2023-01-01T00:00:00.000Z", "end": "2026-01-01T00:00:00.000Z"},
+    "visits": 0,
+    "years": [],
+    "userWorkouts": [],
+}
 
 
 def make_activity(aid: str, start: datetime, *, name="Spinn 60", opens: datetime | None = None,
@@ -56,6 +67,8 @@ def fake_client():
     client.get_centers = AsyncMock(return_value=[Center("1", "3t-rosten", "3T-Rosten")])
     client.book = AsyncMock(return_value={"__typename": "GroupActivityBooking", "id": "b1"})
     client.cancel = AsyncMock(return_value={})
+    client.get_workout_summary = AsyncMock(return_value={"goal": 3, "summary": EMPTY_SUMMARY})
+    client.get_visits = AsyncMock(return_value=0)
     with (
         patch("custom_components.threet.ThreeTClient", return_value=client),
         patch("custom_components.threet.config_flow.ThreeTClient", return_value=client),

@@ -40,6 +40,7 @@ class RefreshButton(ThreeTAccountEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         await self.coordinator.async_refresh_now()
+        await self.coordinator.config_entry.runtime_data.stats.async_request_refresh()
 
 
 class CancelBookingButton(ThreeTAccountEntity, ButtonEntity):

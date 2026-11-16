@@ -16,6 +16,7 @@ from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN
 from .coordinator import ThreeTCoordinator
+from .stats_coordinator import ThreeTStatsCoordinator
 from .threet_api import ThreeTClient
 
 PLATFORMS = [Platform.BUTTON, Platform.CALENDAR, Platform.SENSOR, Platform.SWITCH]
@@ -31,6 +32,7 @@ ATTR_CONFIG_ENTRY_ID = "config_entry_id"
 class ThreeTRuntime:
     client: ThreeTClient
     coordinator: ThreeTCoordinator
+    stats: ThreeTStatsCoordinator
 
 
 type ThreeTConfigEntry = ConfigEntry[ThreeTRuntime]
@@ -93,7 +95,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ThreeTConfigEntry) -> bo
     await coordinator.async_config_entry_first_refresh()
 
     _remove_stale_rule_devices(hass, entry, {r.id for r in coordinator.rules})
-    entry.runtime_data = ThreeTRuntime(client, coordinator)
+    stats = ThreeTStatsCoordinator(hass, coordinator)
+    entry.runtime_data = ThreeTRuntime(client, coordinator, stats)
+    # Statistics (incl. a one-time backfill) must not delay startup.
+    entry.async_create_background_task(hass, stats.async_refresh(), f"{DOMAIN}_stats_first")
     entry.async_on_unload(coordinator.cancel_all_timers)
     entry.async_on_unload(entry.add_update_listener(_async_reload))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

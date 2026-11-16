@@ -1,6 +1,9 @@
 {
   "domain": "threet",
   "name": "3T Treningssenter",
+  "after_dependencies": [
+    "recorder"
+  ],
   "codeowners": [
     "@jenslien"
   ],
@@ -9,5 +12,5 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/jenslien/threet-booking/issues",
   "requirements": [],
-  "version": "0.7.0"
+  "version": "0.8.0"
 }
