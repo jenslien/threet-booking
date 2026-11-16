@@ -19,7 +19,7 @@ class ThreeTAccountEntity(CoordinatorEntity[ThreeTCoordinator]):
         self._attr_unique_id = f"{entry.unique_id}_{key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
-            name="3T",
+            name=coordinator.device_prefix,
             manufacturer="3T-Treningssenter",
             entry_type=DeviceEntryType.SERVICE,
         )
@@ -37,7 +37,7 @@ class ThreeTRuleEntity(CoordinatorEntity[ThreeTCoordinator]):
         self._attr_unique_id = f"{entry.unique_id}_{rule.id}_{key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"{entry.entry_id}_{rule.id}")},
-            name=f"3T fast: {rule.label}",
+            name=f"{coordinator.device_prefix} fast: {rule.label}",
             manufacturer="3T-Treningssenter",
             model="Fast booking",
             entry_type=DeviceEntryType.SERVICE,

@@ -37,22 +37,30 @@ type ThreeTConfigEntry = ConfigEntry[ThreeTRuntime]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    def _coordinator(call: ServiceCall) -> ThreeTCoordinator:
+    def _coordinators(call: ServiceCall) -> list[ThreeTCoordinator]:
         entry_id = call.data.get(ATTR_CONFIG_ENTRY_ID)
-        entries = [
-            e
+        coordinators = [
+            e.runtime_data.coordinator
             for e in hass.config_entries.async_entries(DOMAIN)
             if e.state is ConfigEntryState.LOADED and (entry_id is None or e.entry_id == entry_id)
         ]
-        if not entries:
+        if not coordinators:
             raise ServiceValidationError("No loaded 3T account found")
-        return entries[0].runtime_data.coordinator
+        return coordinators
 
     async def _book(call: ServiceCall) -> ServiceResponse:
-        return await _coordinator(call).async_book(call.data[ATTR_ACTIVITY_ID])
+        coordinators = _coordinators(call)
+        if len(coordinators) > 1:
+            raise ServiceValidationError("Several 3T accounts: choose one with config_entry_id")
+        return await coordinators[0].async_book(call.data[ATTR_ACTIVITY_ID])
 
     async def _cancel(call: ServiceCall) -> None:
-        await _coordinator(call).async_cancel(call.data[ATTR_BOOKING_ID])
+        booking_id = call.data[ATTR_BOOKING_ID]
+        for coordinator in _coordinators(call):
+            if coordinator.data and any(b.id == booking_id for b in coordinator.data.bookings):
+                await coordinator.async_cancel(booking_id)
+                return
+        raise ServiceValidationError(f"Unknown booking {booking_id}")
 
     hass.services.async_register(
         DOMAIN,

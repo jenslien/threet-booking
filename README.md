@@ -27,6 +27,15 @@ Oppdateringer dukker opp i Marketplace når det publiseres en ny GitHub-release.
 1. Kopier `custom_components/threet` til `<config>/custom_components/threet`.
 2. Start Home Assistant på nytt.
 
+### Flere kontoer
+
+Legg til integrasjonen én gang per 3T-konto og gi hver konto et navn, for eksempel
+«Kona». Enhetene heter da «3T Kona», og entitetene får ID-er som
+`sensor.3t_kona_kommende_bookinger` og `button.3t_kona_avbestill_booking_1`.
+Kontoen du la til uten navn beholder ID-ene den har. Faste timer har attributtet
+`account`, så et dashbordkort kan filtrere på én konto:
+`selectattr('attributes.account', 'eq', 'Kona')`.
+
 ### Etter installasjon
 
 1. *Innstillinger → Enheter og tjenester → Legg til integrasjon → 3T Treningssenter*,

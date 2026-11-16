@@ -16,7 +16,7 @@ from homeassistant.config_entries import (
     ConfigFlowResult,
     OptionsFlow,
 )
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.const import CONF_NAME, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
@@ -39,6 +39,7 @@ MAX_SUGGESTIONS = 25
 
 CREDENTIALS_SCHEMA = vol.Schema(
     {
+        vol.Optional(CONF_NAME): TextSelector(),
         vol.Required(CONF_USERNAME): TextSelector(TextSelectorConfig(type=TextSelectorType.EMAIL)),
         vol.Required(CONF_PASSWORD): TextSelector(
             TextSelectorConfig(type=TextSelectorType.PASSWORD)
@@ -82,8 +83,12 @@ class ThreeTConfigFlow(ConfigFlow, domain=DOMAIN):
             if not errors:
                 await self.async_set_unique_id(user_id)
                 self._abort_if_unique_id_configured()
+                name = (user_input.get(CONF_NAME) or "").strip()
+                data = {**user_input, CONF_NAME: name} if name else {
+                    k: v for k, v in user_input.items() if k != CONF_NAME
+                }
                 return self.async_create_entry(
-                    title=user_input[CONF_USERNAME], data=user_input, options={CONF_RULES: []}
+                    title=name or user_input[CONF_USERNAME], data=data, options={CONF_RULES: []}
                 )
         return self.async_show_form(
             step_id="user",

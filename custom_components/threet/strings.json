@@ -3,10 +3,11 @@
     "step": {
       "user": {
         "title": "Log in to 3T",
-        "description": "Use the same e-mail and password as on 3t.no.",
+        "description": "Use the same e-mail and password as on 3t.no. The name is used for devices and entities when you have several 3T accounts.",
         "data": {
           "username": "E-mail",
-          "password": "Password"
+          "password": "Password",
+          "name": "Name (optional, e.g. Partner)"
         }
       },
       "reauth_confirm": {

@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_NAME, CONF_USERNAME
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.event import async_track_point_in_utc_time
@@ -93,6 +94,19 @@ class ThreeTCoordinator(DataUpdateCoordinator[ThreeTData]):
         self._in_progress: set[str] = set()
         self._timetable: dict[str, list[GroupActivity]] = {}
         self._timetable_fetched: datetime | None = None
+
+    @property
+    def account_name(self) -> str | None:
+        """Optional display name for this account, e.g. "Kona" (entry title if not the e-mail)."""
+        entry = self.config_entry
+        if name := entry.data.get(CONF_NAME):
+            return name
+        return entry.title if entry.title != entry.data.get(CONF_USERNAME) else None
+
+    @property
+    def device_prefix(self) -> str:
+        """ "3T" for an unnamed account, "3T Kona" for a named one."""
+        return f"3T {self.account_name}" if self.account_name else "3T"
 
     # -- persistence -------------------------------------------------------
 

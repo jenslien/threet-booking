@@ -3,10 +3,11 @@
     "step": {
       "user": {
         "title": "Logg inn på 3T",
-        "description": "Bruk samme e-post og passord som på 3t.no.",
+        "description": "Bruk samme e-post og passord som på 3t.no. Navnet brukes på enheter og entiteter når du har flere 3T-kontoer.",
         "data": {
           "username": "E-post",
-          "password": "Passord"
+          "password": "Passord",
+          "name": "Navn (valgfritt, f.eks. Kona)"
         }
       },
       "reauth_confirm": {

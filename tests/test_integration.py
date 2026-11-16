@@ -37,6 +37,7 @@ async def setup_entry(hass, rules=(RULE,)) -> MockConfigEntry:
     entry = MockConfigEntry(
         domain=DOMAIN,
         unique_id="12345",
+        title="a@b.no",
         data={"username": "a@b.no", "password": "x"},
         options={CONF_RULES: list(rules)},
     )
@@ -343,3 +344,47 @@ async def test_refresh_button(hass: HomeAssistant, fake_client) -> None:
     await hass.async_block_till_done()
     assert fake_client.get_my_bookings.await_count == 1
     fake_client.get_group_activities.assert_not_called()
+
+
+async def test_two_accounts(hass: HomeAssistant, fake_client) -> None:
+    await hass.config.async_set_time_zone("Europe/Oslo")
+    a = make_activity("a1", next_monday_19(dt_util.utcnow()))
+    fake_client.get_my_bookings.return_value = [make_booking("b1", a)]
+    await setup_entry(hass)  # unnamed: entity ids keep the plain "3t_" prefix
+    kona = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="67890",
+        title="Kona",
+        data={"username": "kona@example.no", "password": "x", "name": "Kona"},
+        options={CONF_RULES: [RULE]},
+    )
+    kona.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(kona.entry_id)
+    await hass.async_block_till_done()
+
+    assert hass.states.get("button.3t_avbestill_booking_1")
+    assert hass.states.get("button.3t_kona_avbestill_booking_1")
+    assert hass.states.get("sensor.3t_kona_kommende_bookinger")
+    status = hass.states.get("sensor.3t_kona_fast_spinn_60_3t_rosten_mandag_19_00_status")
+    assert status.attributes["account"] == "Kona"
+    assert hass.states.get("sensor.3t_fast_spinn_60_3t_rosten_mandag_19_00_status").attributes["account"] is None
+
+    import pytest
+    from homeassistant.exceptions import ServiceValidationError
+
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call("threet", "book", {"activity_id": "a1"}, blocking=True)
+    await hass.services.async_call(
+        "threet", "book", {"activity_id": "a1", "config_entry_id": kona.entry_id}, blocking=True
+    )
+    await hass.services.async_call("threet", "cancel", {"booking_id": "b1"}, blocking=True)
+    fake_client.cancel.assert_awaited_once()
+
+
+async def test_user_flow_with_name(hass: HomeAssistant, fake_client) -> None:
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"name": "Kona", "username": "k@b.no", "password": "x"}
+    )
+    assert result["title"] == "Kona"
+    assert result["data"]["name"] == "Kona"

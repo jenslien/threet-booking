@@ -135,6 +135,7 @@ class RuleStatusSensor(ThreeTRuleEntity, SensorEntity):
             booked.append(text)
         return {
             "rule": self.rule.label,
+            "account": self.coordinator.account_name,
             "booked": booked,
             "next_class": fmt_local(occ.start, tz) if occ else None,
             "booking_opens": fmt_local(occ.bookable_earliest, tz) if occ else None,

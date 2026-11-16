@@ -10,6 +10,7 @@ from homeassistant.components.button import ButtonEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util import slugify
 
 from . import ThreeTConfigEntry
 from .const import BOOKING_SLOTS
@@ -51,7 +52,7 @@ class CancelBookingButton(ThreeTAccountEntity, ButtonEntity):
     def __init__(self, coordinator, index: int) -> None:
         super().__init__(coordinator, f"cancel_booking_{index + 1}")
         self.index = index
-        self.entity_id = f"button.3t_avbestill_booking_{index + 1}"
+        self.entity_id = f"button.{slugify(coordinator.device_prefix)}_avbestill_booking_{index + 1}"
 
     @property
     def _booking(self) -> Booking | None:
@@ -62,7 +63,7 @@ class CancelBookingButton(ThreeTAccountEntity, ButtonEntity):
     def name(self) -> str:
         b = self._booking
         if b is None:
-            return f"3T booking {self.index + 1} (ledig)"
+            return f"{self.coordinator.device_prefix} booking {self.index + 1} (ledig)"
         return booking_title(b, self.coordinator.tz)
 
     @property
