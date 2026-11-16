@@ -9,11 +9,29 @@ en frittstående Python-klient og et kommandolinjeverktøy for testing.
 
 ## Installere i Home Assistant
 
+### Via Marketplace (Home Assistant 2026.11 og nyere)
+
+Krever at dette GitHub-repoet er **offentlig**. Marketplace (tidligere HACS)
+kan ikke lese private repoer.
+
+1. *Innstillinger → Marketplace*. Koble til GitHub-kontoen første gang (device sign-in).
+2. *Add from link* oppe til høyre, skriv `jenslien/threet-booking` og trykk *Add*.
+   Velg typen *Integration* hvis du blir spurt.
+3. Åpne «3T Treningssenter» i Marketplace og trykk *Download*.
+4. Start Home Assistant på nytt.
+
+Oppdateringer dukker opp i Marketplace når det publiseres en ny GitHub-release.
+
+### Manuelt
+
 1. Kopier `custom_components/threet` til `<config>/custom_components/threet`.
 2. Start Home Assistant på nytt.
-3. *Innstillinger → Enheter og tjenester → Legg til integrasjon → 3T Treningssenter*,
+
+### Etter installasjon
+
+1. *Innstillinger → Enheter og tjenester → Legg til integrasjon → 3T Treningssenter*,
    logg inn med e-post og passord fra 3t.no.
-4. Trykk *Konfigurer* på integrasjonen for å legge til faste timer:
+2. Trykk *Konfigurer* på integrasjonen for å legge til faste timer:
    - **Forslag fra historikken min**: timer du har booket minst 2 ganger siste år.
    - **Velg fra timeplanen**: senter → ukedag → huk av timer.
    - **Fjern faste bookinger**.
