@@ -78,6 +78,10 @@ Konto (enhet «3T»):
 | `sensor.3t_booking_1..6` | Kommende bookinger i tidsrekkefølge |
 | `button.3t_avbestill_booking_1..6` | Avbestiller tilsvarende booking (utilgjengelig etter fristen) |
 
+Ikonet på bookingene og på status/neste time for faste timer følger timetypen, ut fra
+nøkkelord i navnet: sykkel (spinn), yoga/pilates, dans, boksing, vann, løp/kondisjon og
+styrke. Ukjente timer får et kalenderikon. Listen ligger i `ACTIVITY_ICONS` i `models.py`.
+
 Tjenester: `threet.book` (`activity_id`) og `threet.cancel` (`booking_id`).
 Hendelser: `threet_booked` og `threet_booking_failed`, som kan brukes til varsler.
 

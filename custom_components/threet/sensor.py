@@ -13,7 +13,7 @@ from . import ThreeTConfigEntry
 from .const import BOOKING_SLOTS, RULE_STATUSES
 from .entity import ThreeTAccountEntity, ThreeTRuleEntity
 from .stats_sensor import DESCRIPTIONS as STATS_DESCRIPTIONS, StatsSensor
-from .models import activity_details, booking_details, fmt_local
+from .models import activity_details, activity_icon, booking_details, fmt_local
 from .threet_api import Booking
 
 
@@ -82,7 +82,6 @@ class BookingSlotSensor(ThreeTAccountEntity, SensorEntity):
     """The n-th upcoming booking; pairs with the matching cancel button."""
 
     _attr_device_class = SensorDeviceClass.TIMESTAMP
-    _attr_icon = "mdi:dumbbell"
 
     def __init__(self, coordinator, index: int) -> None:
         super().__init__(coordinator, f"booking_{index + 1}")
@@ -100,6 +99,11 @@ class BookingSlotSensor(ThreeTAccountEntity, SensorEntity):
         return b.activity.start if b and b.activity else None
 
     @property
+    def icon(self) -> str:
+        b = self.booking
+        return activity_icon(b.activity.name if b and b.activity else None)
+
+    @property
     def extra_state_attributes(self) -> dict[str, Any]:
         b = self.booking
         if b is None:
@@ -115,10 +119,10 @@ class RuleStatusSensor(ThreeTRuleEntity, SensorEntity):
     _attr_translation_key = "rule_status"
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = RULE_STATUSES
-    _attr_icon = "mdi:calendar-sync"
 
     def __init__(self, coordinator, rule) -> None:
         super().__init__(coordinator, rule, "status")
+        self._attr_icon = activity_icon(rule.name)
 
     @property
     def native_value(self) -> str | None:
@@ -161,6 +165,7 @@ class RuleNextClassSensor(ThreeTRuleEntity, SensorEntity):
 
     def __init__(self, coordinator, rule) -> None:
         super().__init__(coordinator, rule, "next_class")
+        self._attr_icon = activity_icon(rule.name)
 
     @property
     def native_value(self) -> datetime | None:

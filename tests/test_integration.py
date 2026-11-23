@@ -392,3 +392,29 @@ async def test_user_flow_with_name(hass: HomeAssistant, fake_client) -> None:
     )
     assert result["title"] == "Kona"
     assert result["data"]["name"] == "Kona"
+
+
+def test_activity_icon() -> None:
+    from custom_components.threet.models import activity_icon
+
+    assert activity_icon("Spinn 60") == "mdi:bike"
+    assert activity_icon("Indoor Cycling 45") == "mdi:bike"
+    assert activity_icon("Styrke Total 45") == "mdi:dumbbell"
+    assert activity_icon("Yin Yoga") == "mdi:yoga"
+    assert activity_icon("Yoga Styrke") == "mdi:yoga"
+    assert activity_icon("Zumba") == "mdi:dance-ballroom"
+    assert activity_icon("Grunntrening") == "mdi:calendar-check"
+    assert activity_icon(None) == "mdi:calendar-check"
+
+
+async def test_icons_follow_class(hass: HomeAssistant, fake_client) -> None:
+    await hass.config.async_set_time_zone("Europe/Oslo")
+    a = make_activity("a1", next_monday_19(dt_util.utcnow()), name="Yin Yoga")
+    fake_client.get_my_bookings.return_value = [make_booking("b1", a)]
+    await setup_entry(hass)
+
+    assert hass.states.get("sensor.3t_booking_1").attributes["icon"] == "mdi:yoga"
+    assert hass.states.get("sensor.3t_booking_2").attributes["icon"] == "mdi:calendar-check"
+    rule = "sensor.3t_fast_spinn_60_3t_rosten_mandag_19_00"
+    assert hass.states.get(f"{rule}_status").attributes["icon"] == "mdi:bike"
+    assert hass.states.get(f"{rule}_neste_time").attributes["icon"] == "mdi:bike"

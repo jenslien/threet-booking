@@ -13,6 +13,29 @@ from .threet_api.suggest import WEEKDAYS, SlotKey
 
 SHORT_WEEKDAYS = ["man.", "tir.", "ons.", "tor.", "fre.", "lør.", "søn."]
 
+# Keywords (lower case, matched as substrings of the class name) -> icon. First match wins,
+# so e.g. "Yoga Styrke" is yoga.
+ACTIVITY_ICONS: list[tuple[tuple[str, ...], str]] = [
+    (("spinn", "spin", "sykkel", "cycl", "rpm", "bike"), "mdi:bike"),
+    (("yoga", "pilates", "stretch", "tøyning", "mobilitet", "barre"), "mdi:yoga"),
+    (("dans", "zumba", "dance", "sh'bam"), "mdi:dance-ballroom"),
+    (("box", "kick", "fight", "combat"), "mdi:boxing-glove"),
+    (("aqua", "vann", "svøm", "swim"), "mdi:swim"),
+    (("løp", "running", "kondis", "hiit", "tabata", "intervall", "step", "cardio"), "mdi:run"),
+    (("styrke", "pump", "core", "vekt", "kettlebell", "strength", "sirkel", "crossfit", "functional"),
+     "mdi:dumbbell"),
+]
+DEFAULT_ACTIVITY_ICON = "mdi:calendar-check"
+
+
+def activity_icon(name: str | None) -> str:
+    """Icon for a class name, e.g. "Spinn 60" -> "mdi:bike"."""
+    lower = (name or "").lower()
+    for keywords, icon in ACTIVITY_ICONS:
+        if any(k in lower for k in keywords):
+            return icon
+    return DEFAULT_ACTIVITY_ICON
+
 
 def fmt_local(dt: datetime | None, tz: tzinfo) -> str | None:
     """E.g. "man. 23.11 kl. 19:00"."""
